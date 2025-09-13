@@ -3,6 +3,7 @@ import os
 from google import genai
 from google.genai import types
 from dotenv import load_dotenv
+from config import system_prompt
 
 
 def main():
@@ -36,13 +37,14 @@ def main():
         types.Content(role="user", parts=[types.Part(text=user_prompt)]),
     ]
 
-    generate_content(client, messages, user_prompt, verbose)
+    generate_content(client, messages, system_prompt, verbose, user_prompt)
 
 
-def generate_content(client, messages, user_prompt, verbose):
+def generate_content(client, messages, system_prompt, verbose, user_prompt):
     response = client.models.generate_content(
         model="gemini-2.0-flash-001",
         contents=messages,
+        config=types.GenerateContentConfig(system_instruction=system_prompt),
     )
     if verbose:
         print(f"User prompt: {user_prompt}")
