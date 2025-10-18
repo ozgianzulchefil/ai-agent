@@ -4,6 +4,7 @@ from google import genai
 from google.genai import types
 from dotenv import load_dotenv
 from config import system_prompt
+from functions.get_files_info import schema_get_files_info
 
 
 def main():
@@ -12,6 +13,7 @@ def main():
     args = sys.argv[1:]
     argument_verbose = "--verbose"
     verbose = argument_verbose in args
+
 
     if not args:
         print("AI Code Assistant")
@@ -28,8 +30,6 @@ def main():
     else:
         user_prompt = " ".join(args)
 
-
-
     api_key = os.environ.get("GEMINI_API_KEY")
     client = genai.Client(api_key=api_key)
 
@@ -41,17 +41,30 @@ def main():
 
 
 def generate_content(client, messages, system_prompt, verbose, user_prompt):
+
+    available_functions = types.Tool(
+        function_declarations=[schema_get_files_info]
+    )
+    
     response = client.models.generate_content(
         model="gemini-2.0-flash-001",
         contents=messages,
-        config=types.GenerateContentConfig(system_instruction=system_prompt),
+        config=types.GenerateContentConfig(
+            tools=[available_functions], 
+            system_instruction=system_prompt,),
     )
+
     if verbose:
         print(f"User prompt: {user_prompt}")
         print("Prompt tokens:", response.usage_metadata.prompt_token_count)
         print("Response tokens:", response.usage_metadata.candidates_token_count)
+    
     print("Response:")
-    print(response.text)
+    if response.function_calls:
+        for fc in response.function_calls:
+            print(f"Calling function: {fc.name}({fc.args})")
+    else:
+        print(response.text)
 
 
 if __name__ == "__main__":
