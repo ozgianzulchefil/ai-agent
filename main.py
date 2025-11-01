@@ -5,9 +5,13 @@ from google.genai import types
 from dotenv import load_dotenv
 from config import system_prompt
 from functions.get_files_info import schema_get_files_info
+from functions.get_files_info import get_files_info
 from functions.get_file_content import schema_get_file_content
+from functions.get_file_content import get_file_content
 from functions.run_python_file import schema_run_python_file
+from functions.run_python_file import run_python_file
 from functions.write_file import schema_write_file
+from functions.write_file import write_file
 
 
 def main():
@@ -42,6 +46,53 @@ def main():
 
     generate_content(client, messages, system_prompt, verbose, user_prompt)
 
+FUNCTIONS = {
+    "get_files_info": get_files_info,
+    "get_file_content": get_file_content,
+    "write_file": write_file,
+    "run_python_file": run_python_file,
+}
+
+function_call_part = types.FunctionCall(
+    name = "",
+    args = {},
+)
+
+def call_function(function_call_part, verbose=False):
+    function_name = function_call_part.name
+
+    kwargs = dict(function_call_part.args or {})
+    if "file" in kwargs and "file_path" not in kwargs:
+        kwargs["file_path"] = kwargs.pop("file")
+    kwargs["working_directory"] = "./calculator"
+    if verbose:
+        print(f"Calling function: {function_call_part.name}({function_call_part.args})")
+    else:
+        print(f" - Calling function: {function_call_part.name}")
+
+    if function_name not in FUNCTIONS:
+        return types.Content(
+            role="tool",
+            parts=[
+                types.Part.from_function_response(
+                name=function_name,
+                response={"error": f"Unknown function: {function_name}"},
+                )
+            ],
+        )
+
+    func = FUNCTIONS[function_name]
+    function_result = func(**kwargs)
+    return types.Content(
+        role="tool",
+        parts=[
+            types.Part.from_function_response(
+            name=function_name,
+            response={"result": function_result},
+            )
+        ],
+    )
+
 
 def generate_content(client, messages, system_prompt, verbose, user_prompt):
 
@@ -70,7 +121,11 @@ def generate_content(client, messages, system_prompt, verbose, user_prompt):
     print("Response:")
     if response.function_calls:
         for fc in response.function_calls:
-            print(f"Calling function: {fc.name}({fc.args})")
+            function_call_result = call_function(fc, verbose=verbose)
+            if not function_call_result.parts or not function_call_result.parts[0].function_response:
+                raise RuntimeError("Function call returned no function_response")
+            if verbose:
+                print(f"-> {function_call_result.parts[0].function_response.response}")
     else:
         print(response.text)
 
